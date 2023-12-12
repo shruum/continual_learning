@@ -1,0 +1,82 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: fahad-cl-rkd-v1
+  namespace: arl
+  labels:
+    username: fahad.sarfraz
+    team: arl
+    project: act-ssl
+spec:
+  ttlSecondsAfterFinished: 604800
+  activeDeadlineSeconds: 1209600
+  template:
+    spec:
+      securityContext:
+        runAsUser: 3071
+      containers:
+### JOB CONTAINER POD
+      - name: pytorch17
+        image: nvcr.io/navinfo/aicv/pytorch1.7:21.03
+        imagePullPolicy: IfNotPresent
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+        command: ["/bin/bash"]
+        args: ["-c","python /git/continual_learning/mammoth/main.py  \
+        experiments.ntasks=10 \
+        path.data=data \
+        path.checkpoint=/output/cl_w_rkd/
+        --config /git/continual_learning/RRR/configs/cifar_cil_rrr_kd_sp_v2.yaml
+"]
+        volumeMounts:
+        - name: git-volume
+          mountPath: /git
+        - name: input
+          mountPath: /input
+        - name: output
+          mountPath: /output
+        - name: dshm
+          mountPath: /dev/shm
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: docker-credentials
+      nodeSelector:
+        gpu-servers: aicv
+#        gpu-memory: 32GB
+### INIT CONTAINER POD
+      initContainers:
+      - name: git-clone
+        image: alpine/git
+        args:
+          - clone
+          - -b
+          - clser-iclr
+          - https://$(BITBUCKET_USER):$(BITBUCKET_PASS)@bitbucket.navinfo.eu/scm/one/art.git
+          - /git
+        env:
+          - name: BITBUCKET_USER
+            valueFrom:
+              secretKeyRef:
+               name: bitbucket-credentials
+               key: username
+          - name: BITBUCKET_PASS
+            valueFrom:
+              secretKeyRef:
+               name: bitbucket-credentials
+               key: password
+        volumeMounts:
+        - name: git-volume
+          mountPath: /git
+      volumes:
+      - name: git-volume
+        emptyDir: {}
+      - name: input
+        hostPath:
+          path: /data/input/datasets/
+      - name: output
+        hostPath:
+          path: /data/output/fahad.sarfraz/
+      - name: dshm
+        emptyDir:
+          medium: Memory

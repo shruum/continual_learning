@@ -1,0 +1,18 @@
+python main.py  \
+--experiment_id baseline \
+--model clserpp \
+--dataset seq-cifar10 \
+--buffer_size 200 \
+--reg_weight 0.15 \
+--at_weight 0 \
+--feat_level 3 \
+--stable_model_update_freq 0.1 \
+--stable_model_alpha 0.999 \
+--stable_model_update_freq 0.3 \
+--plastic_model_alpha 0.999 \
+--batch_size 32 \
+--minibatch_size 32 \
+--lr 0.1 \
+--n_epochs 50 \
+--tensorboard \
+--csv_log \

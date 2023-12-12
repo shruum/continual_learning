@@ -1,7 +1,3 @@
-# Learning Fast, Learning Slow 
-Official Repository for Learning Fast, Learning Slow: A General Continual Learning Method based on Complementary Learning System
-
-We extended the [Mammoth](https://github.com/aimagelab/mammoth) framework with our method (CLS-ER) and GCIL-CIFAR-100 dataset
 
 ## Setup
 
@@ -14,29 +10,10 @@ We extended the [Mammoth](https://github.com/aimagelab/mammoth) framework with o
  Examples:
 
     ```
-    python main.py --dataset seq-mnist --model clser --buffer_size 500 --load_best_args
+    python main.py --dataset seq-mnist --model er --buffer_size 500 --load_best_args
     
-    python main.py --dataset seq-cifar10 --model clser --buffer_size 500 --load_best_args
+    python main.py --dataset seq-cifar10 --model er --buffer_size 500 --load_best_args
     
-    python main.py --dataset seq-tinyimg --model clser --buffer_size 500 --load_best_args
-   
-    python main.py --dataset perm-mnist --model clser --buffer_size 500 --load_best_args
-    
-    python main.py --dataset rot-mnist --model clser --buffer_size 500 --load_best_args
-    
-    python main.py --dataset mnist-360 --model clser --buffer_size 500 --load_best_args```
-
-+ For GCIL-CIFAR-100 Experiments
-
-    `python main.py --dataset <dataset> --weight_dist <weight_dist> --model <model> --buffer_size <buffer_size> --load_best_args`
-
-Example:
-
-    ```
-    python main.py --dataset gcil-cifar100 --weight_dist unif --model clser --buffer_size 500 --load_best_args
-    
-    python main.py --dataset gcil-cifar100 --weight_dist longtail --model clser --buffer_size 500 --load_best_args
-    ```
 
 ## Requirements
 

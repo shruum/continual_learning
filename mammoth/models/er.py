@@ -8,6 +8,7 @@ import os
 from utils.buffer import Buffer
 from utils.args import *
 from models.utils.continual_model import ContinualModel
+from utils.utils import get_similarity
 
 
 def get_parser() -> ArgumentParser:
@@ -57,8 +58,10 @@ class Er(ContinualModel):
 
         return loss.item()
 
-    def end_task(self, dataset) -> None:
+    def end_task(self, dataset, clip_name, d_probe, concept_set, batch_size, device, pool_mode, similarity_fn) -> None:
         self.current_task += 1
+        get_similarity(clip_name, self.net, "layer4", d_probe, concept_set,
+                        batch_size, device, pool_mode, dataset, similarity_fn)
         model_dir = os.path.join(self.args.output_dir, "task_models", dataset.NAME, self.args.experiment_id)
         os.makedirs(model_dir, exist_ok=True)
         torch.save(self.net, os.path.join(model_dir, f'task_{self.current_task}_model.ph'))

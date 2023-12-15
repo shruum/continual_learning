@@ -212,6 +212,7 @@ def train(model: ContinualModel, dataset: ContinualDataset,
         model_stash['epoch_idx'] = 0
 
         if hasattr(model, 'end_task'):
+            #TODO pass args for CLIP-dissect
             model.end_task(dataset)
 
         print()

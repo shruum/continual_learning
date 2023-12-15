@@ -120,18 +120,20 @@ def get_clip_text_features(model, text, batch_size=1000):
     text_features = torch.cat(text_features, dim=0)
     return text_features
 
-def get_clip_image_features(model, dataset, batch_size=1000 , device = "cuda"):
+def get_clip_image_features(model, dataset, device = "cuda"):
     all_features = []
     
     with torch.no_grad():
-        for images, labels in tqdm(DataLoader(dataset, batch_size, num_workers=8, pin_memory=True, shuffle=False)):
-            features = model.encode_image(images.to(device))
-            all_features.append(features)
+        for k, test_loader in enumerate(dataset.test_loaders):
+            if k < len(dataset.test_loaders) - 1:
+                continue
+            for images, labels in tqdm(test_loader):
+                features = model.encode_image(images.to(device))
+                all_features.append(features)
     img_features = torch.cat(all_features)
     return img_features
 
-def get_target_activations(target_model, dataset, target_layers = ["layer4"], batch_size = 1000,
-                            device = "cuda", pool_mode='avg'):
+def get_target_activations(target_model, dataset, target_layers = ["layer4"], device = "cuda", pool_mode='avg'):
     
     all_features = {target_layer:[] for target_layer in target_layers}
 
@@ -153,13 +155,11 @@ def get_target_activations(target_model, dataset, target_layers = ["layer4"], ba
 
     return target_features
 
-def get_similarity(clip_name, target_model, target_layers, d_probe, 
+def get_similarity(clip_name, target_model, target_layers, 
                      concept_set, batch_size, pool_mode, dataset, similarity_fn, task=0, 
                                    return_target_feats=True, device="cuda"):
     
-    clip_model, clip_preprocess = clip.load(clip_name, device=device)
-    #setup data
-    data_c = data_utils.get_data(d_probe, clip_preprocess)
+    clip_model, _ = clip.load(clip_name, device=device)
 
     with open(concept_set, 'r') as f: 
         words = (f.read()).split('\n')
@@ -169,9 +169,8 @@ def get_similarity(clip_name, target_model, target_layers, d_probe,
     text = clip.tokenize(["{}".format(word) for word in words]).to(device)
     
     text_features = get_clip_text_features(clip_model, text, batch_size)
-    image_features = get_clip_image_features(clip_model, data_c, batch_size, device)
-    target_feats = get_target_activations(target_model, dataset, target_layers,
-                            batch_size, device, pool_mode)
+    image_features = get_clip_image_features(clip_model, dataset, device)
+    target_feats = get_target_activations(target_model, dataset, target_layers, batch_size, device, pool_mode)
     
     #image_features = torch.load(clip_save_name, map_location='cpu').float()
     #text_features = torch.load(text_save_name, map_location='cpu').float()

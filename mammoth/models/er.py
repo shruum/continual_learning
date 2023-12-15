@@ -58,10 +58,17 @@ class Er(ContinualModel):
 
         return loss.item()
 
-    def end_task(self, dataset, clip_name, d_probe, concept_set, batch_size, device, pool_mode, similarity_fn) -> None:
+    def end_task(self, dataset, clip_name, concept_set, batch_size, device, pool_mode, similarity_fn) -> None:
         self.current_task += 1
-        get_similarity(clip_name, self.net, "layer4", d_probe, concept_set,
-                        batch_size, device, pool_mode, dataset, similarity_fn)
+        similarity, target_feats = get_similarity(clip_name, self.net, "layer4", concept_set,
+                                                  batch_size, device, pool_mode, dataset, similarity_fn)
+        with open(concept_set, 'r') as f: 
+            words = (f.read()).split('\n')
+
+        vals, ids = torch.max(similarity, dim=1)
+        # TODO find top 5 neurons per class
+        # current class: dataset.i
+
         model_dir = os.path.join(self.args.output_dir, "task_models", dataset.NAME, self.args.experiment_id)
         os.makedirs(model_dir, exist_ok=True)
         torch.save(self.net, os.path.join(model_dir, f'task_{self.current_task}_model.ph'))

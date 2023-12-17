@@ -8,7 +8,7 @@ import os
 from utils.buffer import Buffer
 from utils.args import *
 from models.utils.continual_model import ContinualModel
-from utils.utils import get_similarity
+from utils.clip_utils import get_similarity
 
 
 def get_parser() -> ArgumentParser:
@@ -58,18 +58,44 @@ class Er(ContinualModel):
 
         return loss.item()
 
-    def end_task(self, dataset, clip_name, concept_set, batch_size, device, pool_mode, similarity_fn) -> None:
-        self.current_task += 1
-        similarity, target_feats = get_similarity(clip_name, self.net, "layer4", concept_set,
-                                                  batch_size, device, pool_mode, dataset, similarity_fn)
-        with open(concept_set, 'r') as f: 
+    def end_task(self, dataset) -> None: #
+
+        concept_set = get_concept(self.current_task)
+        with open(concept_set, 'r') as f:
             words = (f.read()).split('\n')
 
+        similarity_fn = "soft_wpmi"
+        pool_mode = "avg"
+        similarity, target_feats = get_similarity(self.clip_model, self.net, ["layer4",], concept_set,
+                                                  self.args.batch_size, pool_mode, dataset, similarity_fn, device=self.device)
+
         vals, ids = torch.max(similarity, dim=1)
+        descriptions = [words[int(idx)] for idx in ids]
+
         # TODO find top 5 neurons per class
         # current class: dataset.i
+        # neuron = {}
+        # for i in range(len(ids)):
+        #     neuron[ids[i]] = vals[i]
 
         model_dir = os.path.join(self.args.output_dir, "task_models", dataset.NAME, self.args.experiment_id)
         os.makedirs(model_dir, exist_ok=True)
         torch.save(self.net, os.path.join(model_dir, f'task_{self.current_task}_model.ph'))
 
+        self.current_task += 1
+
+
+
+def get_concept(task):
+    if task == 0:
+        concept_set = 'data/cifar10_t0.txt'
+    elif task == 1:
+        concept_set = 'data/cifar10_t1.txt'
+    elif task == 2:
+        concept_set = 'data/cifar10_t2.txt'
+    elif task == 3:
+        concept_set = 'data/cifar10_t3.txt'
+    elif task == 4:
+        concept_set = 'data/cifar10_t4.txt'
+
+    return concept_set

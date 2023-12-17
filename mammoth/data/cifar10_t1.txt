@@ -1,0 +1,5 @@
+airplane
+automobile
+bird
+cat
+

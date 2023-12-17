@@ -5,9 +5,38 @@ import torch
 import clip
 from tqdm import tqdm
 from torch.utils.data import DataLoader
-import data_utils
 
 PM_SUFFIX = {"max":"_max", "avg":""}
+
+
+def soft_wpmi(clip_feats, target_feats, top_k=100, a=10, lam=1, device='cuda',
+              min_prob=1e-7, p_start=0.998, p_end=0.97):
+    with torch.no_grad():
+        torch.cuda.empty_cache()
+        clip_feats = torch.nn.functional.softmax(a * clip_feats, dim=1)
+
+        top_k = 20
+        inds = torch.topk(target_feats, dim=0, k=top_k)[1]
+        prob_d_given_e = []
+
+        p_in_examples = p_start - (torch.arange(start=0, end=top_k) / top_k * (p_start - p_end)).unsqueeze(1).to(device)
+        for orig_id in tqdm(range(target_feats.shape[1])):
+            curr_clip_feats = clip_feats.gather(0, inds[:, orig_id:orig_id + 1].expand(-1, clip_feats.shape[1])).to(
+                device)
+
+            curr_p_d_given_e = 1 + p_in_examples * (curr_clip_feats - 1)
+            curr_p_d_given_e = torch.sum(torch.log(curr_p_d_given_e + min_prob), dim=0, keepdim=True)
+            prob_d_given_e.append(curr_p_d_given_e)
+            torch.cuda.empty_cache()
+
+        prob_d_given_e = torch.cat(prob_d_given_e, dim=0)
+        print(prob_d_given_e.shape)
+        # logsumexp trick to avoid underflow
+        prob_d = (torch.logsumexp(prob_d_given_e, dim=0, keepdim=True) -
+                  torch.log(prob_d_given_e.shape[0] * torch.ones([1]).to(device)))
+        mutual_info = prob_d_given_e - lam * prob_d
+    return mutual_info
+
 
 def get_activation(outputs, mode):
     '''
@@ -121,13 +150,14 @@ def get_clip_text_features(model, text, batch_size=1000):
     return text_features
 
 def get_clip_image_features(model, dataset, device = "cuda"):
-    all_features = []
-    
+    all_features= []
+
     with torch.no_grad():
-        for k, test_loader in enumerate(dataset.test_loaders):
-            if k < len(dataset.test_loaders) - 1:
+        for k, test_loader in enumerate(dataset.test_clip_loaders):
+            if k < len(dataset.test_clip_loaders) - 1:
                 continue
-            for images, labels in tqdm(test_loader):
+            for data in tqdm(test_loader):
+                images, labels = data
                 features = model.encode_image(images.to(device))
                 all_features.append(features)
     img_features = torch.cat(all_features)
@@ -146,7 +176,8 @@ def get_target_activations(target_model, dataset, target_layers = ["layer4"], de
         for k, test_loader in enumerate(dataset.test_loaders):
             if k < len(dataset.test_loaders) - 1:
                 continue
-            for images, labels in tqdm(test_loader): #, shuffle=False)):
+            for data in tqdm(test_loader):
+                images, labels = data
                 features = target_model(images.to(device))
     
     for target_layer in target_layers:
@@ -155,11 +186,11 @@ def get_target_activations(target_model, dataset, target_layers = ["layer4"], de
 
     return target_features
 
-def get_similarity(clip_name, target_model, target_layers, 
-                     concept_set, batch_size, pool_mode, dataset, similarity_fn, task=0, 
+def get_similarity(clip_model, target_model, target_layers,
+                     concept_set, batch_size, pool_mode, dataset, similarity_type, task=0,
                                    return_target_feats=True, device="cuda"):
     
-    clip_model, _ = clip.load(clip_name, device=device)
+    # clip_model, _ = clip.load(clip_name, device=device)
 
     with open(concept_set, 'r') as f: 
         words = (f.read()).split('\n')
@@ -170,7 +201,7 @@ def get_similarity(clip_name, target_model, target_layers,
     
     text_features = get_clip_text_features(clip_model, text, batch_size)
     image_features = get_clip_image_features(clip_model, dataset, device)
-    target_feats = get_target_activations(target_model, dataset, target_layers, batch_size, device, pool_mode)
+    target_feats = get_target_activations(target_model, dataset, target_layers, device, pool_mode)
     
     #image_features = torch.load(clip_save_name, map_location='cpu').float()
     #text_features = torch.load(text_save_name, map_location='cpu').float()
@@ -183,7 +214,8 @@ def get_similarity(clip_name, target_model, target_layers,
     torch.cuda.empty_cache()
     
     #target_feats = torch.load(target_save_name, map_location='cpu')
-    similarity = similarity_fn(clip_feats, target_feats, device=device)
+    # similarity_fn = eval("similarity.{}".format(similarity_type))
+    similarity = soft_wpmi(clip_feats, target_feats, device=device)
     
     del clip_feats
     torch.cuda.empty_cache()

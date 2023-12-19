@@ -5,6 +5,7 @@
 
 import torch
 import os
+import numpy as np
 from utils.buffer import Buffer
 from utils.args import *
 from models.utils.continual_model import ContinualModel
@@ -70,13 +71,13 @@ class Er(ContinualModel):
                                                   self.args.batch_size, pool_mode, dataset, similarity_fn, device=self.device)
 
         vals, ids = torch.max(similarity, dim=1)
-        descriptions = [words[int(idx)] for idx in ids]
 
-        # TODO find top 5 neurons per class
-        # current class: dataset.i
-        # neuron = {}
-        # for i in range(len(ids)):
-        #     neuron[ids[i]] = vals[i]
+        for class_id in range(dataset.N_CLASSES_PER_TASK):
+            task_ind = np.arange(len(vals))[ids.detach().cpu().numpy() == (dataset.i - dataset.N_CLASSES_PER_TASK + class_id)]
+            top5_sim, top5_ind = torch.topk(vals[task0_ind], min(task_ind.shape[0], 5))
+            neurons = task_ind[top5_ind.detach().cpu().numpy()]
+            print(neurons)
+
 
         model_dir = os.path.join(self.args.output_dir, "task_models", dataset.NAME, self.args.experiment_id)
         os.makedirs(model_dir, exist_ok=True)

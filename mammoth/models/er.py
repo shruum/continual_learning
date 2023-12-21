@@ -69,28 +69,26 @@ class Er(ContinualModel):
 
     def end_task(self, dataset) -> None: #
 
-        concept_set = get_concept(self.current_task)
-        with open(concept_set, 'r') as f:
-            words = (f.read()).split('\n')
+        if self.current_task < (dataset.N_TASKS - 1):
+            concept_set = get_concept(self.current_task)
+            with open(concept_set, 'r') as f:
+                words = (f.read()).split('\n')
+            similarity_fn = "soft_wpmi"
+            pool_mode = "avg"
+            similarity, target_feats = get_similarity(self.clip_model, self.net, ["layer4",], concept_set,
+                                                      self.args.batch_size, pool_mode, dataset, similarity_fn, device=self.device)
+            vals, ids = torch.max(similarity, dim=1)
 
-        similarity_fn = "soft_wpmi"
-        pool_mode = "avg"
-        similarity, target_feats = get_similarity(self.clip_model, self.net, ["layer4",], concept_set,
-                                                  self.args.batch_size, pool_mode, dataset, similarity_fn, device=self.device)
-
-        vals, ids = torch.max(similarity, dim=1)
-
-        ones = torch.ones(3, 3)
-        self.mask = ones.repeat(64, 1, 1)
-        for class_id in range(dataset.N_CLASSES_PER_TASK):
-            task_ind = np.arange(len(vals))[ids.detach().cpu().numpy() == (dataset.i - dataset.N_CLASSES_PER_TASK + class_id)]
-            top5_sim, top5_ind = torch.topk(vals[task_ind], min(task_ind.shape[0], 5))
-            neurons = task_ind[top5_ind.detach().cpu().numpy()]
-            print(neurons)
-
-            for neuron in neurons:
-                self.mask[neuron, :, :] = torch.zeros(3, 3)
-                self.mask = self.mask.to(self.device)
+            ones = torch.ones(3, 3)
+            self.mask = ones.repeat(64, 1, 1)
+            for class_id in range(dataset.N_CLASSES_PER_TASK):
+                task_ind = np.arange(len(vals))[ids.detach().cpu().numpy() == (dataset.i - dataset.N_CLASSES_PER_TASK + class_id)]
+                top5_sim, top5_ind = torch.topk(vals[task_ind], min(task_ind.shape[0], 5))
+                neurons = task_ind[top5_ind.detach().cpu().numpy()]
+                print(neurons)
+                for neuron in neurons:
+                    self.mask[neuron, :, :] = torch.zeros(3, 3)
+                    self.mask = self.mask.to(self.device)
 
         model_dir = os.path.join(self.args.output_dir, "task_models", dataset.NAME, self.args.experiment_id)
         os.makedirs(model_dir, exist_ok=True)

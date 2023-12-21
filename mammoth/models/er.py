@@ -37,6 +37,7 @@ class Er(ContinualModel):
         super(Er, self).__init__(backbone, loss, args, transform)
         self.buffer = Buffer(self.args.buffer_size, self.device)
         self.current_task = 0
+        self.mask = None
 
     def observe(self, inputs, labels, not_aug_inputs):
 
@@ -52,6 +53,13 @@ class Er(ContinualModel):
         outputs = self.net(inputs)
         loss = self.loss(outputs, labels)
         loss.backward()
+
+        if self.mask is not None:
+            for name, param in self.net.named_parameters():
+                if name == "layer4.1.conv2.weight":
+                    for b in range(inputs.shape[0]):
+                        param.grad[b,:,:,:] *= self.mask
+
         self.opt.step()
 
         self.buffer.add_data(examples=not_aug_inputs,
@@ -72,12 +80,17 @@ class Er(ContinualModel):
 
         vals, ids = torch.max(similarity, dim=1)
 
+        ones = torch.ones(3, 3)
+        self.mask = ones.repeat(64, 1, 1)
         for class_id in range(dataset.N_CLASSES_PER_TASK):
             task_ind = np.arange(len(vals))[ids.detach().cpu().numpy() == (dataset.i - dataset.N_CLASSES_PER_TASK + class_id)]
-            top5_sim, top5_ind = torch.topk(vals[task0_ind], min(task_ind.shape[0], 5))
+            top5_sim, top5_ind = torch.topk(vals[task_ind], min(task_ind.shape[0], 5))
             neurons = task_ind[top5_ind.detach().cpu().numpy()]
             print(neurons)
 
+            for neuron in neurons:
+                self.mask[neuron, :, :] = torch.zeros(3, 3)
+                self.mask = self.mask.to(self.device)
 
         model_dir = os.path.join(self.args.output_dir, "task_models", dataset.NAME, self.args.experiment_id)
         os.makedirs(model_dir, exist_ok=True)

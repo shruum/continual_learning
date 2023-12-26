@@ -67,3 +67,8 @@ def add_rehearsal_args(parser: ArgumentParser) -> None:
                         help='The size of the memory buffer.')
     parser.add_argument('--minibatch_size', type=int, required=True,
                         help='The batch size of the memory buffer.')
+
+    parser.add_argument('--top_neurons', type=int, required=True,
+                        help='Number of neurons to freeze.')
+    parser.add_argument('--grad_multiplier', type=float, required=True,
+                        help='to create a maks of gradients')

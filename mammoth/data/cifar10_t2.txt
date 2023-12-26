@@ -1,0 +1,7 @@
+airplane
+automobile
+bird
+cat
+deer
+dog
+

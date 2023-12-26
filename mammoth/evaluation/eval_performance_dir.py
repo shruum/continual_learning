@@ -2,30 +2,8 @@ import os
 import glob
 import pandas as pd
 
-# exp_dir = r'/data/output/fahad.sarfraz/cil_er_mnist'
-# exp_dir = r'/data/output/fahad.sarfraz/cil_er_cifar10'
-# exp_dir = r'/data/output/fahad.sarfraz/er_gil_cifar100'
-# exp_dir = r'/data/output/fahad.sarfraz/cil_er_gil_cifar100_new'
-# exp_dir = r'/data/output/fahad.sarfraz/cil_er_imagenet'
-# exp_dir = r'/data/output/fahad.sarfraz/cil_er_mnist360'
-# exp_dir = r'/data/output/fahad.sarfraz/cil_er_mnist_new'
-# exp_dir = r'/data/output/fahad.sarfraz/cil_er_mnist_200'
-# exp_dir = r'/data/output/fahad.sarfraz/cil_er_rmnist'
-# exp_dir = r'/data/output/fahad.sarfraz/cil_er_rmnist_5120'
-# exp_dir = r'/data/output/fahad.sarfraz/cil_er_cifar10_sensitivity_analysis'
-# exp_dir = r'/data/output/fahad.sarfraz/cil_er_pmnist_final'
-# exp_dir = r'/data/output/fahad.sarfraz/cil_er_pmnist_final_merged'
-# exp_dir = r'/data/output/fahad.sarfraz/sgd_gil_cifar100'
-# exp_dir = r'/data/output/fahad.sarfraz/joint_gil_cifar100'
-# exp_dir = r'/data/output/fahad.sarfraz/cls_er_imagenet_final'
-# exp_dir = r'/data/output/fahad.sarfraz/cil_er_pp_cifar10'
-# exp_dir = r'/data/output/fahad.sarfraz/cil_er_mixup_cifar10'
 
-# exp_dir = r'/data/output/fahad.sarfraz/ema_er_smnist'
-# exp_dir = r'/data/output/fahad.sarfraz/ema_er_rmnist'
-# exp_dir = r'/data/output/fahad.sarfraz/ema_er_pmnist'
-# exp_dir = r'/data/output/fahad.sarfraz/ema_er_cifar10'
-exp_dir = r'/data/output/fahad.sarfraz/ema_er_imagenet_final'
+exp_dir = r'/data/output-ai/shruthi.gowda/xai_cl/clip/er_xai'
 
 lst_tasks = ['class-il', 'task-il', 'domain-il']
 lst_dict_vals = []
@@ -34,16 +12,7 @@ for task in lst_tasks:
     lst_files = glob.glob(r'%s/results/%s/*/*/*/mean_accs.csv' % (exp_dir, task))
 
     for file_path in lst_files:
-        if 'plastic_model' in file_path:
-            eval_mode = 'plastic'
-        elif 'stable_model' in file_path:
-            eval_mode = 'stable'
-        elif '_ema' in file_path:
-            eval_mode = 'ema'
-        elif '_ensemble' in file_path:
-            eval_mode = 'ensemble'
-        else:
-            eval_mode = 'normal'
+        eval_mode = 'normal'
 
         path_tokens = file_path.split('/')
         dataset = path_tokens[-4]

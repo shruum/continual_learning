@@ -11,7 +11,7 @@ from datasets.seq_tinyimagenet import base_path
 from PIL import Image
 import numpy as np
 from datasets.utils.validation import get_train_val
-from datasets.utils.continual_dataset import ContinualDataset, store_masked_loaders
+from datasets.utils.continual_dataset import ContinualDataset, store_masked_loaders, store_clip_masked_loaders
 from datasets.utils.continual_dataset import get_previous_train_loader
 from typing import Tuple
 from datasets.transforms.denormalization import DeNormalize
@@ -66,6 +66,14 @@ class SequentialCIFAR10(ContinualDataset):
                                   (0.2470, 0.2435, 0.2615))
              ]
     )
+    TRANSFORM_CLIP = transforms.Compose(
+            [transforms.Resize(224),
+             transforms.CenterCrop(224),
+             transforms.ToTensor(),
+             transforms.Normalize((0.4914, 0.4822, 0.4465),
+                                  (0.2470, 0.2435, 0.2615))
+             ]
+    )
 
     def get_data_loaders(self):
         transform = self.TRANSFORM
@@ -87,6 +95,14 @@ class SequentialCIFAR10(ContinualDataset):
 
         train, test = store_masked_loaders(train_dataset, test_dataset, self)
         return train, test
+
+    def get_clip_data_loaders(self):
+        test_transform = self.TRANSFORM_CLIP
+        test_dataset = CIFAR10(base_path() + 'CIFAR10', train=False,
+                               download=True, transform=test_transform)
+
+        test = store_clip_masked_loaders(test_dataset, self)
+        return
 
     def not_aug_dataloader(self, batch_size):
         transform = transforms.Compose([transforms.ToTensor(), self.get_normalization_transform()])

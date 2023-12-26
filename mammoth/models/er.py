@@ -5,9 +5,11 @@
 
 import torch
 import os
+import numpy as np
 from utils.buffer import Buffer
 from utils.args import *
 from models.utils.continual_model import ContinualModel
+from utils.clip_utils import get_similarity
 
 
 def get_parser() -> ArgumentParser:
@@ -35,6 +37,10 @@ class Er(ContinualModel):
         super(Er, self).__init__(backbone, loss, args, transform)
         self.buffer = Buffer(self.args.buffer_size, self.device)
         self.current_task = 0
+        # self.mask = None
+        layer_size = [par.size()[1] for name, par in self.net.named_parameters() if name == "layer4.1.conv2.weight"][0]
+        ones = torch.ones(3, 3)
+        self.mask = ones.repeat(layer_size, 1, 1)
 
     def observe(self, inputs, labels, not_aug_inputs):
 
@@ -50,6 +56,13 @@ class Er(ContinualModel):
         outputs = self.net(inputs)
         loss = self.loss(outputs, labels)
         loss.backward()
+
+        if self.current_task > 0:
+            mask = self.mask.repeat(512, 1,1,1)
+            for name, param in self.net.named_parameters():
+                if name == "layer4.1.conv2.weight": #change
+                    param.grad *= mask
+
         self.opt.step()
 
         self.buffer.add_data(examples=not_aug_inputs,
@@ -57,9 +70,46 @@ class Er(ContinualModel):
 
         return loss.item()
 
-    def end_task(self, dataset) -> None:
-        self.current_task += 1
+    def end_task(self, dataset) -> None: #
+
+        if self.current_task < (dataset.N_TASKS - 1):
+            concept_set = get_concept(self.current_task)
+            with open(concept_set, 'r') as f:
+                words = (f.read()).split('\n')
+            similarity_fn = "soft_wpmi"
+            pool_mode = "avg"
+            similarity, target_feats = get_similarity(self.clip_model, self.net, ["layer4",], concept_set,
+                                                      self.args.batch_size, pool_mode, dataset, similarity_fn, device=self.device)
+            vals, ids = torch.max(similarity, dim=1)
+
+
+            for class_id in range(dataset.N_CLASSES_PER_TASK):
+                task_ind = np.arange(len(vals))[ids.detach().cpu().numpy() == (dataset.i - dataset.N_CLASSES_PER_TASK + class_id)]
+                top5_sim, top5_ind = torch.topk(vals[task_ind], min(task_ind.shape[0], self.args.top_neurons))
+                neurons = task_ind[top5_ind.detach().cpu().numpy()]
+                print(neurons)
+                for neuron in neurons:
+                    self.mask[neuron, :, :] *= self.args.grad_multiplier #torch.zeros(3, 3)
+                    self.mask = self.mask.to(self.device)
+
         model_dir = os.path.join(self.args.output_dir, "task_models", dataset.NAME, self.args.experiment_id)
         os.makedirs(model_dir, exist_ok=True)
         torch.save(self.net, os.path.join(model_dir, f'task_{self.current_task}_model.ph'))
 
+        self.current_task += 1
+
+
+
+def get_concept(task):
+    if task == 0:
+        concept_set = 'data/cifar10_t0.txt'
+    elif task == 1:
+        concept_set = 'data/cifar10_t1.txt'
+    elif task == 2:
+        concept_set = 'data/cifar10_t2.txt'
+    elif task == 3:
+        concept_set = 'data/cifar10_t3.txt'
+    elif task == 4:
+        concept_set = 'data/cifar10_t4.txt'
+
+    return concept_set

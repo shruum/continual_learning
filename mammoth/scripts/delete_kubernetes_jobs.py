@@ -1,5 +1,5 @@
 import os
-os.system('kubectl -n arl get jobs | grep cls-er | grep 1/1 > completed_jobs.txt')
+os.system('kubectl -n cyber-security-gpu get jobs | grep shru > completed_jobs.txt')
 # os.system('kubectl -n arl get jobs | grep fahad-joint > completed_jobs.txt')
 # os.system('kubectl -n arl get jobs | grep naresh-cs > completed_jobs.txt')
 # os.system('kubectl -n arl get jobs | grep fahad > completed_jobs.txt')
@@ -12,6 +12,6 @@ with open('completed_jobs.txt', 'r') as f:
 
 for job in lst_jobs:
     count += 1
-    os.system('kubectl -n arl delete job %s' % job)
+    os.system('kubectl -n cyber-security-gpu delete job %s' % job)
 
 print(f'{count} jobs deleted')

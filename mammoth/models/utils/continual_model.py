@@ -9,7 +9,7 @@ import torch
 import torchvision
 from argparse import Namespace
 from utils.conf import get_device
-
+import clip
 
 class ContinualModel(nn.Module):
     """
@@ -28,6 +28,8 @@ class ContinualModel(nn.Module):
         self.transform = transform
         self.opt = SGD(self.net.parameters(), lr=self.args.lr)
         self.device = get_device()
+        # self.clip_model, _ = clip.load('/output/ViT-B-16.pt', device=self.device)
+        self.clip_model, _ = clip.load('ViT-B/16', device=self.device)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """

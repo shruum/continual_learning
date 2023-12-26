@@ -159,6 +159,7 @@ def train(model: ContinualModel, dataset: ContinualDataset,
     for t in range(dataset.N_TASKS):
         model.net.train()
         train_loader, test_loader = dataset.get_data_loaders()
+        dataset.get_clip_data_loaders()
         if hasattr(model, 'begin_task'):
             model.begin_task(dataset)
         if t:
@@ -212,6 +213,7 @@ def train(model: ContinualModel, dataset: ContinualDataset,
         model_stash['epoch_idx'] = 0
 
         if hasattr(model, 'end_task'):
+            #TODO pass args for CLIP-dissect
             model.end_task(dataset)
 
         print()

@@ -2,9 +2,19 @@
 # All rights reserved.
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
-import os
 # os.chdir(r'/git/continual_learning/mammoth')
+
 import importlib
+import os
+import sys
+conf_path = os.getcwd()
+sys.path.append(conf_path)
+sys.path.append(conf_path + '/datasets')
+sys.path.append(conf_path + '/backbone')
+sys.path.append(conf_path + '/models')
+sys.path.append(conf_path + '/data')
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
 from datasets import NAMES as DATASET_NAMES
 from models import get_all_models
 from argparse import ArgumentParser
@@ -76,6 +86,7 @@ def main():
     model = get_model(args, backbone, loss, dataset.get_transform())
 
     if isinstance(dataset, ContinualDataset):
+
         train(model, dataset, args)
     else:
         assert not hasattr(model, 'end_task')

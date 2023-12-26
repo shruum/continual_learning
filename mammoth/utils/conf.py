@@ -20,6 +20,7 @@ def base_path() -> str:
     Returns the base bath where to log accuracies and tensorboard data.
     """
     return '/data/input-ai/datasets/'
+    # return /input/
 
 
 def set_random_seed(seed: int) -> None:

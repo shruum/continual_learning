@@ -10,8 +10,8 @@ import torch.nn.functional as F
 from datasets.seq_tinyimagenet import base_path
 from PIL import Image
 import numpy as np
-from datasets.utils.validation import get_train_val
-from datasets.utils.continual_dataset import ContinualDataset, store_masked_loaders, store_clip_masked_loaders
+from datasets.utils.validation import get_train_val, get_train_data_clip
+from datasets.utils.continual_dataset import ContinualDataset, store_masked_loaders, store_clip_masked_loaders, store_xai_masked_loaders
 from datasets.utils.continual_dataset import get_previous_train_loader
 from typing import Tuple
 from datasets.transforms.denormalization import DeNormalize
@@ -74,6 +74,14 @@ class SequentialCIFAR10(ContinualDataset):
                                   (0.2470, 0.2435, 0.2615))
              ]
     )
+    TRANSFORM_XAI = transforms.Compose(
+            [transforms.Resize(32),
+             transforms.CenterCrop(32),
+             transforms.ToTensor(),
+             transforms.Normalize((0.4914, 0.4822, 0.4465),
+                                  (0.2470, 0.2435, 0.2615))
+             ]
+    )
 
     def get_data_loaders(self):
         transform = self.TRANSFORM
@@ -88,21 +96,32 @@ class SequentialCIFAR10(ContinualDataset):
                                   download=True, transform=transform)
         if self.args.validation:
             train_dataset, test_dataset = get_train_val(train_dataset,
-                                                    test_transform, self.NAME)
+                                                    transform, self.NAME)
         else:
             test_dataset = CIFAR10(base_path() + 'CIFAR10', train=False,
                                    download=True, transform=test_transform)
 
         train, test = store_masked_loaders(train_dataset, test_dataset, self)
+
         return train, test
 
     def get_clip_data_loaders(self):
-        test_transform = self.TRANSFORM_CLIP
-        test_dataset = CIFAR10(base_path() + 'CIFAR10', train=False,
-                               download=True, transform=test_transform)
+        transform_clip = self.TRANSFORM_CLIP
+        transform_xai = self.TRANSFORM_XAI
 
-        test = store_clip_masked_loaders(test_dataset, self)
-        return
+        train_dataset_clip = MyCIFAR10(base_path() + 'CIFAR10', train=True,
+                                  download=True, transform=transform_clip)
+        train_val_dataset_clip, test_val_dataset = get_train_data_clip(train_dataset_clip, transform_clip)
+
+        train_dataset_xai = MyCIFAR10(base_path() + 'CIFAR10', train=True,
+                                  download=True, transform=transform_xai)
+        train_val_dataset_xai, test_val_dataset = get_train_data_clip(train_dataset_xai, transform_xai)
+
+        print(self.i)
+        val_train_clip = store_clip_masked_loaders(train_val_dataset_clip, self)
+        val_train_xai = store_xai_masked_loaders(train_val_dataset_xai, self)
+
+        return val_train_clip, val_train_xai
 
     def not_aug_dataloader(self, batch_size):
         transform = transforms.Compose([transforms.ToTensor(), self.get_normalization_transform()])
@@ -112,6 +131,9 @@ class SequentialCIFAR10(ContinualDataset):
         train_loader = get_previous_train_loader(train_dataset, batch_size, self)
 
         return train_loader
+
+    def increment_class(self):
+        self.i += self.N_CLASSES_PER_TASK
 
     @staticmethod
     def get_transform():
@@ -139,4 +161,6 @@ class SequentialCIFAR10(ContinualDataset):
         transform = DeNormalize((0.4914, 0.4822, 0.4465),
                                 (0.2470, 0.2435, 0.2615))
         return transform
+
+
 

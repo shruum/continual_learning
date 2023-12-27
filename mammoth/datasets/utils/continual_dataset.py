@@ -34,6 +34,7 @@ class ContinualDataset:
         self.train_loader = None
         self.test_loaders = []
         self.test_clip_loaders = []
+        self.test_xai_loaders = []
 
         self.i = 0
         self.args = args
@@ -127,12 +128,12 @@ def store_masked_loaders(train_dataset: datasets, test_dataset: datasets,
     setting.test_loaders.append(test_loader)
     setting.train_loader = train_loader
 
-    setting.i += setting.N_CLASSES_PER_TASK
+    # setting.i += setting.N_CLASSES_PER_TASK
+
     return train_loader, test_loader
 
 
-def store_clip_masked_loaders(test_dataset: datasets,
-                    setting: ContinualDataset) -> Tuple[DataLoader, DataLoader]:
+def store_clip_masked_loaders(val_train_dataset: datasets, setting: ContinualDataset) -> Tuple[DataLoader, DataLoader]:
     """
     Divides the dataset into tasks.
     :param train_dataset: train dataset
@@ -140,17 +141,40 @@ def store_clip_masked_loaders(test_dataset: datasets,
     :param setting: continual learning setting
     :return: train and test loaders
     """
-    test_mask = np.logical_and(np.array(test_dataset.targets) >= setting.i,
-        np.array(test_dataset.targets) < setting.i + setting.N_CLASSES_PER_TASK)
+    val_mask = np.logical_and(np.array(val_train_dataset.targets) >= setting.i,
+        np.array(val_train_dataset.targets) < setting.i + setting.N_CLASSES_PER_TASK)
 
-    test_dataset.data = test_dataset.data[test_mask]
-    test_dataset.targets = np.array(test_dataset.targets)[test_mask]
+    val_train_dataset.data = val_train_dataset.data[val_mask]
+    val_train_dataset.targets = np.array(val_train_dataset.targets)[val_mask]
 
-    test_loader = DataLoader(test_dataset,
-                             batch_size=setting.args.batch_size, shuffle=False, num_workers=4)
-    setting.test_clip_loaders.append(test_loader)
+    train_loader = DataLoader(val_train_dataset,
+                              batch_size=setting.args.batch_size, shuffle=True, num_workers=4, drop_last=DROP_LAST)
 
-    return test_loader
+    setting.val_train_clip_loader = train_loader
+
+    return train_loader
+
+def store_xai_masked_loaders(val_train_dataset: datasets, setting: ContinualDataset) -> Tuple[DataLoader, DataLoader]:
+    """
+    Divides the dataset into tasks.
+    :param train_dataset: train dataset
+    :param test_dataset: test dataset
+    :param setting: continual learning setting
+    :return: train and test loaders
+    """
+    val_mask = np.logical_and(np.array(val_train_dataset.targets) >= setting.i,
+        np.array(val_train_dataset.targets) < setting.i + setting.N_CLASSES_PER_TASK)
+
+    val_train_dataset.data = val_train_dataset.data[val_mask]
+    val_train_dataset.targets = np.array(val_train_dataset.targets)[val_mask]
+
+    train_loader = DataLoader(val_train_dataset,
+                              batch_size=setting.args.batch_size, shuffle=True, num_workers=4, drop_last=DROP_LAST)
+
+    setting.val_train_xai_loader = train_loader
+
+    return train_loader
+
 
 def get_previous_train_loader(train_dataset: datasets, batch_size: int,
                               setting: ContinualDataset) -> DataLoader:

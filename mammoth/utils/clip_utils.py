@@ -153,13 +153,10 @@ def get_clip_image_features(model, dataset, device = "cuda"):
     all_features= []
 
     with torch.no_grad():
-        for k, test_loader in enumerate(dataset.test_clip_loaders):
-            if k < len(dataset.test_clip_loaders) - 1:
-                continue
-            for data in tqdm(test_loader):
-                images, labels = data
-                features = model.encode_image(images.to(device))
-                all_features.append(features)
+        for k, data in enumerate(dataset.val_train_clip_loader):
+            images, _, _= data
+            features = model.encode_image(images.to(device))
+            all_features.append(features)
     img_features = torch.cat(all_features)
     return img_features
 
@@ -173,12 +170,12 @@ def get_target_activations(target_model, dataset, target_layers = ["layer4"], de
         hooks[target_layer] = eval(command)
 
     with torch.no_grad():
-        for k, test_loader in enumerate(dataset.test_loaders):
-            if k < len(dataset.test_loaders) - 1:
-                continue
-            for data in tqdm(test_loader):
-                images, labels = data
-                features = target_model(images.to(device))
+        # for k, train_loader in enumerate(dataset.train_xai_loader):
+            # if k < len(dataset.train_loader) - 1:
+            #     continue
+        for k, data in enumerate(dataset.val_train_xai_loader):
+            images, _, _ = data
+            features = target_model(images.to(device))
     
     for target_layer in target_layers:
         target_features = torch.cat(all_features[target_layer])

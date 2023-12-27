@@ -159,7 +159,9 @@ def train(model: ContinualModel, dataset: ContinualDataset,
     for t in range(dataset.N_TASKS):
         model.net.train()
         train_loader, test_loader = dataset.get_data_loaders()
-        dataset.get_clip_data_loaders()
+        if t < (dataset.N_TASKS - 1):
+            dataset.get_clip_data_loaders()
+        dataset.increment_class()
         if hasattr(model, 'begin_task'):
             model.begin_task(dataset)
         if t:

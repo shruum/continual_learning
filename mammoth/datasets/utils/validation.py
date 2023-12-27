@@ -72,3 +72,26 @@ def get_train_val(train: datasets, test_transform: transforms,
     train.targets = train.targets[int(val_perc * dataset_length):]
 
     return train, test_dataset
+
+
+def get_train_data_clip(train: datasets, test_transform: transforms,
+                  val_perc: float=0.1):
+    """
+    Extract val_perc% of the training set as the validation set.
+    :param train: training dataset
+    :param test_transform: transformation of the test dataset
+    :param dataset: dataset name
+    :param val_perc: percentage of the training set to be extracted
+    :return: the training set and the validation set
+    """
+    dataset_length = train.data.shape[0]
+
+    train.data = train.data
+    train.targets = np.array(train.targets)
+    test_dataset = ValidationDataset(train.data[:int(val_perc * dataset_length)],
+                                train.targets[:int(val_perc * dataset_length)],
+                                transform=test_transform)
+    train.data = train.data[int(val_perc * dataset_length):]
+    train.targets = train.targets[int(val_perc * dataset_length):]
+
+    return train, test_dataset

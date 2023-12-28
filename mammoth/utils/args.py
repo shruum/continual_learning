@@ -72,3 +72,5 @@ def add_rehearsal_args(parser: ArgumentParser) -> None:
                         help='Number of neurons to freeze.')
     parser.add_argument('--grad_multiplier', type=float, required=True,
                         help='to create a maks of gradients')
+    parser.add_argument('--mask_layer', type=str, default="layer4",
+                        help='layer for gradient masking.')

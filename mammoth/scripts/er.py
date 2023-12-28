@@ -110,42 +110,45 @@ lst_datasets = [
 ]
 
 top_neurons = [10, 25, 30, 50]
+layers = ["layer3", "layer2", "layer1"]
 grad_mult = [0.0, 0.1, 0.5]
 
 for seed in range(start_seed, start_seed + num_runs):
     for dataset, params in lst_datasets:
         for buffer_size in lst_buffer_size:
-            train_params = params[buffer_size]
-            for n in top_neurons:
-                for mul in grad_mult:
-                    exp_id = f"cl-diss-{buffer_size}-{dataset}-neur{n}--gradm{mul}-s{seed}"
-                    job_args = ["-c", f"python /git/mammoth/main.py  \
-                        --experiment_id {exp_id} \
-                        --seed {seed} \
-                        --model er \
-                        --dataset {dataset} \
-                        --buffer_size {buffer_size} \
-                        --lr {train_params['lr']} \
-                        --minibatch_size {train_params['minibatch_size']} \
-                        --n_epochs {train_params['n_epochs']} \
-                        --batch_size {train_params['batch_size']} \
-                        --output_dir /output/er_xai \
-                        --tensorboard \
-                        --csv_log \
-                        --top_neurons {n} \
-                        --grad_multiplier {mul} \
-                        "]
-                    # set job params
-                    job['metadata']['name'] = exp_id + '-shru'
-                    job['spec']['template']['spec']['containers'][0]['args'] = job_args
+                train_params = params[buffer_size]
+                for layer in layers:
+                    for n in top_neurons:
+                        for mul in grad_mult:
+                            exp_id = f"cl-diss-{buffer_size}-{dataset}-neur{n}--gradm{mul}-s{seed}"
+                            job_args = ["-c", f"python /git/mammoth/main.py  \
+                                --experiment_id {exp_id} \
+                                --seed {seed} \
+                                --model er \
+                                --dataset {dataset} \
+                                --buffer_size {buffer_size} \
+                                --lr {train_params['lr']} \
+                                --minibatch_size {train_params['minibatch_size']} \
+                                --n_epochs {train_params['n_epochs']} \
+                                --batch_size {train_params['batch_size']} \
+                                --output_dir /output/er_xai \
+                                --tensorboard \
+                                --csv_log \
+                                --top_neurons {n} \
+                                --grad_multiplier {mul} \
+                                --mask_layer {layer} \
+                                "]
+                        # set job params
+                        job['metadata']['name'] = exp_id + '-shru'
+                        job['spec']['template']['spec']['containers'][0]['args'] = job_args
 
-                    yaml_out = 'temp/%s.yaml' % exp_id
+                        yaml_out = 'temp/%s.yaml' % exp_id
 
-                    with open(yaml_out, 'w') as outfile:
-                        yaml.dump(job, outfile, default_flow_style=False)
+                        with open(yaml_out, 'w') as outfile:
+                            yaml.dump(job, outfile, default_flow_style=False)
 
-                    count += 1
-                    os.system('kubectl -n cyber-security-gpu create -f %s' % yaml_out)
+                        count += 1
+                        os.system('kubectl -n cyber-security-gpu create -f %s' % yaml_out)
 
 print('%s jobs counted' % count)
 

@@ -33,7 +33,7 @@ class Er(ContinualModel):
     NAME = 'er'
     COMPATIBILITY = ['class-il', 'domain-il', 'task-il', 'general-continual']
 
-    def __init__(self, backbone, loss, args, transform):
+    def __init__(self, backbone, loss, args, transform, layer="layer4"):
         super(Er, self).__init__(backbone, loss, args, transform)
         self.buffer = Buffer(self.args.buffer_size, self.device)
         self.current_task = 0
@@ -41,6 +41,7 @@ class Er(ContinualModel):
         layer_size = [par.size()[1] for name, par in self.net.named_parameters() if name == "layer4.1.conv2.weight"][0]
         ones = torch.ones(3, 3)
         self.mask = ones.repeat(layer_size, 1, 1)
+        self.layer = layer
 
     def observe(self, inputs, labels, not_aug_inputs):
 
@@ -60,7 +61,7 @@ class Er(ContinualModel):
         if self.current_task > 0:
             mask = self.mask.repeat(512, 1,1,1)
             for name, param in self.net.named_parameters():
-                if name == "layer4.1.conv2.weight": #change
+                if name == self.layer + ".1.conv2.weight": #change
                     param.grad *= mask
 
         self.opt.step()
@@ -78,7 +79,7 @@ class Er(ContinualModel):
                 words = (f.read()).split('\n')
             similarity_fn = "soft_wpmi"
             pool_mode = "avg"
-            similarity, target_feats = get_similarity(self.clip_model, self.net, ["layer4",], concept_set,
+            similarity, target_feats = get_similarity(self.clip_model, self.net, [self.layer,], concept_set,
                                                       self.args.batch_size, pool_mode, dataset, similarity_fn, device=self.device)
             vals, ids = torch.max(similarity, dim=1)
 

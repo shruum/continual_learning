@@ -83,7 +83,10 @@ def main():
     dataset = get_dataset(args)
     backbone = dataset.get_backbone()
     loss = dataset.get_loss()
-    model = get_model(args, backbone, loss, dataset.get_transform())
+    if args.model == "er":
+        model = get_model(args, backbone, loss, dataset.get_transform(), args.mask_layer)
+    else:
+        model = get_model(args, backbone, loss, dataset.get_transform())
 
     if isinstance(dataset, ContinualDataset):
 

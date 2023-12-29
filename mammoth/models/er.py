@@ -33,15 +33,16 @@ class Er(ContinualModel):
     NAME = 'er'
     COMPATIBILITY = ['class-il', 'domain-il', 'task-il', 'general-continual']
 
-    def __init__(self, backbone, loss, args, transform, layer="layer4"):
+    def __init__(self, backbone, loss, args, transform):
         super(Er, self).__init__(backbone, loss, args, transform)
         self.buffer = Buffer(self.args.buffer_size, self.device)
         self.current_task = 0
-        # self.mask = None
-        layer_size = [par.size()[1] for name, par in self.net.named_parameters() if name == "layer4.1.conv2.weight"][0]
+        print(args.mask_layer)
+        self.layer_weights = [lr + ".1.conv2.weight" for lr in sorted(args.mask_layer)]
+        layer_sizes = [par.size()[1] for name, par in self.net.named_parameters() if name in self.layer_weights]
         ones = torch.ones(3, 3)
-        self.mask = ones.repeat(layer_size, 1, 1)
-        self.layer = layer
+        self.masks = [ones.repeat(layer_sizes[i], 1, 1) for i in range(len(layer_sizes))] 
+        self.layers = sorted(args.mask_layer)
 
     def observe(self, inputs, labels, not_aug_inputs):
 
@@ -59,9 +60,10 @@ class Er(ContinualModel):
         loss.backward()
 
         if self.current_task > 0:
-            mask = self.mask.repeat(512, 1,1,1)
             for name, param in self.net.named_parameters():
-                if name == self.layer + ".1.conv2.weight": #change
+                if name in self.layer_weights: #change
+                    ind = self.layer_weights.index(name)
+                    mask = self.masks[ind].repeat(512, 1,1,1)
                     param.grad *= mask
 
         self.opt.step()
@@ -79,19 +81,22 @@ class Er(ContinualModel):
                 words = (f.read()).split('\n')
             similarity_fn = "soft_wpmi"
             pool_mode = "avg"
-            similarity, target_feats = get_similarity(self.clip_model, self.net, [self.layer,], concept_set,
-                                                      self.args.batch_size, pool_mode, dataset, similarity_fn, device=self.device)
-            vals, ids = torch.max(similarity, dim=1)
+            
+            for i, layer in enumerate(self.layers):
+            
+                similarity, target_feats = get_similarity(self.clip_model, self.net, [layer], concept_set,
+                                                        self.args.batch_size, pool_mode, dataset, similarity_fn, device=self.device)
+                print("SIIIM, ", similarity.shape)
+                vals, ids = torch.max(similarity, dim=1)
 
-
-            for class_id in range(dataset.N_CLASSES_PER_TASK):
-                task_ind = np.arange(len(vals))[ids.detach().cpu().numpy() == (dataset.i - dataset.N_CLASSES_PER_TASK + class_id)]
-                top5_sim, top5_ind = torch.topk(vals[task_ind], min(task_ind.shape[0], self.args.top_neurons))
-                neurons = task_ind[top5_ind.detach().cpu().numpy()]
-                print(neurons)
-                for neuron in neurons:
-                    self.mask[neuron, :, :] *= self.args.grad_multiplier #torch.zeros(3, 3)
-                    self.mask = self.mask.to(self.device)
+                for class_id in range(dataset.N_CLASSES_PER_TASK):
+                    task_ind = np.arange(len(vals))[ids.detach().cpu().numpy() == (dataset.i - dataset.N_CLASSES_PER_TASK + class_id)]
+                    top5_sim, top5_ind = torch.topk(vals[task_ind], min(task_ind.shape[0], self.args.top_neurons))
+                    neurons = task_ind[top5_ind.detach().cpu().numpy()]
+                    print(neurons)
+                    for neuron in neurons:
+                        self.masks[i][neuron, :, :] *= self.args.grad_multiplier #torch.zeros(3, 3)
+                        self.masks[i] = self.masks[i].to(self.device)
 
         model_dir = os.path.join(self.args.output_dir, "task_models", dataset.NAME, self.args.experiment_id)
         os.makedirs(model_dir, exist_ok=True)

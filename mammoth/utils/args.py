@@ -68,7 +68,12 @@ def add_rehearsal_args(parser: ArgumentParser) -> None:
     parser.add_argument('--minibatch_size', type=int, required=True,
                         help='The batch size of the memory buffer.')
 
-    parser.add_argument('--top_neurons', type=int, required=True,
+def add_xai_args(parser: ArgumentParser) -> None:
+    """
+    Adds the arguments used by all the rehearsal-based methods
+    :param parser: the parser instance
+    """
+    parser.add_argument('--top_neurons', nargs='+', default=[], required=True,
                         help='Number of neurons to freeze.')
     parser.add_argument('--grad_multiplier', type=float, required=True,
                         help='to create a maks of gradients')

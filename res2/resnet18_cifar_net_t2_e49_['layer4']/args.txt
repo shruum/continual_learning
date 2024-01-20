@@ -1,0 +1,17 @@
+{
+  "clip_model": "ViT-B/16",
+  "target_model": "resnet18_cifar",
+  "target_path": "/home/nikita/Desktop/continual_learning/net_t2_e49.pth",
+  "target_layers": [
+    "layer4"
+  ],
+  "task": 2,
+  "d_probe": "cifar10_val",
+  "concept_set": "data/cifar10_t2.txt",
+  "batch_size": 200,
+  "device": "cuda",
+  "activation_dir": "saved_activations",
+  "result_dir": "/home/nikita/Desktop/continual_learning/res2/",
+  "pool_mode": "avg",
+  "similarity_fn": "soft_wpmi"
+}

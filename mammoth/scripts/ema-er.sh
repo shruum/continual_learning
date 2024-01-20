@@ -1,0 +1,16 @@
+python main.py  \
+--experiment_id confidence_masking \
+--seed 0 \
+--output_dir results \
+--model er \
+--dataset seq-cifar10 \
+--batch_size 32 \
+--buffer_size 200 \
+--minibatch_size 32 \
+--lr 0.1 \
+--n_epochs 50 \
+--csv_log \
+--tensorboard \
+--top_neurons 5 \
+--grad_multiplier 0.1 \
+--mask_layer "layer4" \

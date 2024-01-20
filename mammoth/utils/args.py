@@ -70,6 +70,8 @@ def add_rehearsal_args(parser: ArgumentParser) -> None:
 
     parser.add_argument('--top_neurons', type=int, required=True,
                         help='Number of neurons to freeze.')
+    parser.add_argument('--top_neurons_rein', type=int, default=0,
+                        help='Number of neurons to reinitialize.')
     parser.add_argument('--grad_multiplier', type=float, required=True,
                         help='to create a maks of gradients')
     parser.add_argument('--mask_layer', nargs='+', default=[], required=True,

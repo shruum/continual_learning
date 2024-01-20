@@ -12,4 +12,5 @@ saved_activations/
 data/broden1_224
 data/resnet18_places365.pth.tar
 results/
+results*/
 *.zip

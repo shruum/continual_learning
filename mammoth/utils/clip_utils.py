@@ -5,9 +5,137 @@ import torch
 import clip
 from tqdm import tqdm
 from torch.utils.data import DataLoader
+from torchvision.models.feature_extraction import create_feature_extractor
+import torch.nn.functional as F
+from pytorch_grad_cam import GradCAM
 
 PM_SUFFIX = {"max":"_max", "avg":""}
 
+class FeatureGroupOutput:
+    '''A model target for GradCAM that consolidates the outputs of all individual features in a group.
+    See ClassifierOutputTarget in pytorch_grad_cam/utils
+    '''
+    def __init__(self, features):
+        self.features = features
+
+    def __call__(self, model_output):
+        print(model_output)
+        if len(model_output.shape) == 1:
+            return model_output[self.features].sum()
+        return model_output[:, self.features].sum(dim = 1)
+
+
+def get_grad_cam(cam, images, targets):
+    images.requires_grad = True
+    grayscale_cam = cam(input_tensor = images, targets = targets)
+    
+    return grayscale_cam
+
+
+def get_clip_image_features2(clip_model, probe_dataset, sample_indices, batch_size = 128, target_feature_group = [], grad_cam = None, resize_transform = None):
+    
+    images = torch.zeros([sample_indices.shape[0], 3, 224, 224])
+    j = 0
+    for i in sample_indices.long():
+        images[j] = probe_dataset[i.item()][0]
+        j += 1
+    
+    if len(target_feature_group) > 0:
+        feat_grad = [FeatureGroupOutput(torch.LongTensor(target_feature_group)) for i in range(images.shape[0])]
+    
+    cropped_images = []
+    clip_image_features = []
+    i = 0
+    while i * batch_size < images.shape[0]:
+        image_batch = images[i * batch_size : (i + 1) * batch_size]
+
+        if grad_cam:
+            # 1. Transform with grad cam
+            grayscale_mask = get_grad_cam(cam = grad_cam,
+                                          images = image_batch,
+                                          targets = feat_grad)
+
+            # Crop images to only keep the activated part 
+            grayscale_mask = torch.Tensor(grayscale_mask)
+            grayscale_mask[grayscale_mask < 0.6] = 0
+            grayscale_mask[grayscale_mask >= 0.6] = 1
+            
+            bb = [torch.LongTensor(mask_to_boxes(m)) for m in grayscale_mask.cpu().numpy()]
+            
+            image_batch = torch.cat([image_batch[img, : , bb[img][1]:bb[img][3] , bb[img][0]:bb[img][2]].unsqueeze(0) for img in range(image_batch.shape[0])])
+
+            cropped_images.append(image_batch)
+
+        with torch.no_grad():
+            clip_image_features.append(clip_model.encode_image(image_batch.cuda()).cuda())
+
+        i += 1
+        
+    if len(clip_image_features) > 0:
+        clip_image_features = torch.cat(clip_image_features, dim = 0)
+        clip_image_features /= clip_image_features.norm(dim=-1, keepdim=True)  
+    else:
+        clip_image_features = torch.Tensor([]).cuda()
+
+    cropped_images = images if len(cropped_images) == 0 else torch.cat(cropped_images)
+    
+    return images, clip_image_features, cropped_images
+
+def mask_to_boxes(mask):
+    ''' Convert a boolean (Height x Width) mask into a (N x 4) array of NON-OVERLAPPING bounding boxes
+    surrounding 'islands of truth' in the mask.  Boxes indicate the (Left, Top, Right, Bottom) bounds
+    of each island, with Right and Bottom being NON-INCLUSIVE (ie they point to the indices AFTER the island).
+
+    This algorithm (Downright Boxing) does not necessarily put separate connected components into
+    separate boxes.
+
+    You can 'cut out' the island-masks with
+        boxes = mask_to_boxes(mask)
+        island_masks = [mask[t:b, l:r] for l, t, r, b in boxes]
+    '''
+    max_ix = max(s+1 for s in mask.shape)   # Use this to represent background
+    # These arrays will be used to carry the 'box start' indices down and to the right.
+    x_ixs = np.full(mask.shape, fill_value=max_ix)
+    y_ixs = np.full(mask.shape, fill_value=max_ix)
+
+    # Propagate the earliest x-index in each segment to the bottom-right corner of the segment
+    for i in range(mask.shape[0]):
+        x_fill_ix = max_ix
+        for j in range(mask.shape[1]):
+            above_cell_ix = x_ixs[i-1, j] if i>0 else max_ix
+            still_active = mask[i, j] or ((x_fill_ix != max_ix) and (above_cell_ix != max_ix))
+            x_fill_ix = min(x_fill_ix, j, above_cell_ix) if still_active else max_ix
+            x_ixs[i, j] = x_fill_ix
+
+    # Propagate the earliest y-index in each segment to the bottom-right corner of the segment
+    for j in range(mask.shape[1]):
+        y_fill_ix = max_ix
+        for i in range(mask.shape[0]):
+            left_cell_ix = y_ixs[i, j-1] if j>0 else max_ix
+            still_active = mask[i, j] or ((y_fill_ix != max_ix) and (left_cell_ix != max_ix))
+            y_fill_ix = min(y_fill_ix, i, left_cell_ix) if still_active else max_ix
+            y_ixs[i, j] = y_fill_ix
+
+    # Find the bottom-right corners of each segment
+    new_xstops = np.diff((x_ixs != max_ix).astype(np.int32), axis=1, append=False)==-1
+    new_ystops = np.diff((y_ixs != max_ix).astype(np.int32), axis=0, append=False)==-1
+    corner_mask = new_xstops & new_ystops
+    y_stops, x_stops = np.array(np.nonzero(corner_mask))
+
+    # Extract the boxes, getting the top-right corners from the index arrays
+    x_starts = x_ixs[y_stops, x_stops]
+    y_starts = y_ixs[y_stops, x_stops]
+    ltrb_boxes = np.hstack([x_starts[:, None], y_starts[:, None], x_stops[:, None]+1, y_stops[:, None]+1])
+    
+    max_area_box = None
+    max_area = 0
+    for bx in ltrb_boxes:
+        ar = (bx[2] - bx[0]) * (bx[3] - bx[1])
+        if ar > max_area:
+            max_area = ar
+            max_area_box = bx
+        
+    return max_area_box
 
 def soft_wpmi(clip_feats, target_feats, top_k=100, a=10, lam=1, device='cuda',
               min_prob=1e-7, p_start=0.998, p_end=0.97):
@@ -182,6 +310,131 @@ def get_target_activations(target_model, dataset, target_layers = ["layer4"], de
         hooks[target_layer].remove()
 
     return target_features
+
+def caption_images(image_emb, caption_dataloader, caption_dataset):
+    top_captions_values = torch.zeros((image_emb.shape[0], 5)).half().cuda()
+    top_captions_indices = torch.zeros((image_emb.shape[0], 5)).long().cuda()
+
+    size = 0
+    
+    for i, (text_emb) in enumerate(caption_dataloader):
+        text_emb = text_emb.view(-1, text_emb.shape[-1]).cuda()
+        values, indices = (100.0 * image_emb @ text_emb.T).softmax(dim=-1).topk(5)
+
+        cat_values = torch.cat([top_captions_values, values], dim = 1)
+        cat_indices = torch.cat([top_captions_indices, indices + size], dim = 1)
+
+        values, indices = cat_values.topk(5)
+        top_captions_values = values
+        top_captions_indices = torch.cat([cat_indices[i, indices[i]].unsqueeze(0) for i in range(cat_indices.shape[0])])
+
+        size += text_emb.shape[0]
+        i += 1
+        
+    print('SIZE:', size)
+
+    caption_set = []
+    score_set = []
+    for i in range(top_captions_indices.shape[0]):
+        caption_set.append(caption_dataset.get_captions(top_captions_indices[i].cpu().numpy().tolist()))
+        score_set.append([val.item() for val in top_captions_values[i]])
+        
+    return caption_set, score_set
+
+
+def get_similarity_new(clip_model, target_model, target_layers,
+                     concept_set, batch_size, pool_mode, dataset, similarity_type, task=0,
+                                   return_target_feats=True, device="cuda"):
+    
+    
+    return_nodes = {
+        "layer4": "layer4",
+        "avg_pool": "avgpool",
+    }
+    
+    encoder = create_feature_extractor(target_model, return_nodes)
+    
+    size = len(dataset.val_train_clip_loader.dataset)
+    representations = torch.zeros((size, 512))
+    for i, (images, _, _) in enumerate(dataset.val_train_clip_loader):
+        with torch.no_grad():
+            #print(encoder(images.cuda())['layer4'].shape, size)
+            representations[i * batch_size: (i + 1) * batch_size] = encoder(images.cuda())['avgpool'].view(-1, 512)
+    
+    representations = F.normalize(representations, dim = 1)
+    
+    # Get highly activating sample indices for each feature
+    lim = 5 # This limit is empirically selected
+    high_thresh = representations.mean() + lim * representations.std()
+    print(high_thresh)
+
+    sample_to_rep = {} # feature index to sample indices
+
+    for i in range(representations.shape[1]):
+        highly_idx = torch.where(representations[:,i] >= high_thresh)[0]
+        if highly_idx.shape[0] > 0:
+            for idx in highly_idx:
+                if idx.item() in sample_to_rep:
+                    sample_to_rep[idx.item()].append(i)
+                else:    
+                    sample_to_rep[idx.item()] = [i]
+
+    groups = {}
+    for sam in sample_to_rep:
+        s = ','.join([str(i) for i in sample_to_rep[sam]])
+        if s in groups:
+            groups[s].append(sam)
+        else:
+            groups[s] = [sam]
+            
+    # Prepare grad cam and CLIP to extract interpretable feature groups
+    cam = GradCAM(model = encoder,
+                  target_layers = [encoder.layer4[-1]] # change target_layers according to the layer we wish to explain
+                  ) 
+    
+    with open(concept_set, 'r') as f: 
+        words = (f.read()).split('\n')
+        #ignore empty lines
+    words = [i for i in words if i!=""]
+    
+    text = clip.tokenize(["{}".format(word) for word in words]).to(device)
+    
+    text_features = get_clip_text_features(clip_model, text, batch_size)
+    
+    with torch.no_grad():
+        text_features /= text_features.norm(dim=-1, keepdim=True)
+    
+    group_captions = {}
+    
+    for feat_str in groups:
+        feats = [int(i) for i in feat_str.split(',')]
+                
+        highly_idx = torch.LongTensor(groups[feat_str])
+
+        highly_act_images, highly_act_clip_features, highly_act_cropped_images = get_clip_image_features2(clip_model = clip_model,
+                                                                                                            probe_dataset = dataset.val_train_clip_loader.dataset,
+                                                                                                            sample_indices = highly_idx,
+                                                                                                            batch_size = batch_size,
+                                                                                                            target_feature_group = feats,
+                                                                                                            grad_cam = cam)
+        
+        #caption_set, score_set = caption_images(highly_act_clip_features.to(torch.float16), caption_dataloader, caption_dataset)
+        values, indices = (100.0 * highly_act_clip_features @ text_features.T).softmax(dim=-1).topk(5)
+        
+        group_captions[feat_str] = indices[0].cpu().numpy()
+
+    del highly_act_clip_features, text_features
+    torch.cuda.empty_cache()
+    
+    del values, indices
+    torch.cuda.empty_cache()
+    
+    if return_target_feats:
+        return group_captions, groups
+    else:
+        del target_feats
+        torch.cuda.empty_cache()
+        return group_captions, groups
 
 def get_similarity(clip_model, target_model, target_layers,
                      concept_set, batch_size, pool_mode, dataset, similarity_type, task=0,

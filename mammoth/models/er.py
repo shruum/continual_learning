@@ -9,7 +9,7 @@ import numpy as np
 from utils.buffer import Buffer
 from utils.args import *
 from models.utils.continual_model import ContinualModel
-from utils.clip_utils import get_similarity
+from utils.clip_utils import get_similarity, get_similarity_new
 
 LAYER_SIZE = {"layer1": 64, "layer2": 128, "layer3": 256, "layer4": 512}
 
@@ -74,7 +74,7 @@ class Er(ContinualModel):
                              labels=labels[:real_batch_size])
 
         return loss.item()
-
+    
     def end_task(self, dataset) -> None: #
 
         if self.current_task < (dataset.N_TASKS - 1):
@@ -86,8 +86,12 @@ class Er(ContinualModel):
             
             for i, layer in enumerate(self.layers):
             
-                similarity, target_feats = get_similarity(self.clip_model, self.net, [layer], concept_set,
+                group_captions, groups = get_similarity_new(self.clip_model, self.net, [layer], concept_set,
                                                         self.args.batch_size, pool_mode, dataset, similarity_fn, device=self.device)
+                
+                print(group_captions)
+                
+                print(groups)
                 
                 vals, ids = torch.max(similarity, dim=1)
 
@@ -105,80 +109,111 @@ class Er(ContinualModel):
         torch.save(self.net, os.path.join(model_dir, f'task_{self.current_task}_model.ph'))
 
         self.current_task += 1
+
+    # def end_task(self, dataset) -> None: #
+
+    #     if self.current_task < (dataset.N_TASKS - 1):
+    #         concept_set = get_concept(self.current_task)
+    #         with open(concept_set, 'r') as f:
+    #             words = (f.read()).split('\n')
+    #         similarity_fn = "soft_wpmi"
+    #         pool_mode = "avg"
+            
+    #         for i, layer in enumerate(self.layers):
+            
+    #             similarity, target_feats = get_similarity(self.clip_model, self.net, [layer], concept_set,
+    #                                                     self.args.batch_size, pool_mode, dataset, similarity_fn, device=self.device)
+                
+    #             vals, ids = torch.max(similarity, dim=1)
+
+    #             for class_id in range(dataset.N_CLASSES_PER_TASK):
+    #                 task_ind = np.arange(len(vals))[ids.detach().cpu().numpy() == (dataset.i - dataset.N_CLASSES_PER_TASK + class_id)]
+    #                 top5_sim, top5_ind = torch.topk(vals[task_ind], min(task_ind.shape[0], self.args.top_neurons))
+    #                 neurons = task_ind[top5_ind.detach().cpu().numpy()]
+    #                 print(neurons)
+    #                 for neuron in neurons:
+    #                     self.masks[i][neuron, :, :] *= self.args.grad_multiplier #torch.zeros(3, 3)
+    #                     self.masks[i] = self.masks[i].to(self.device)
+
+    #     model_dir = os.path.join(self.args.output_dir, "task_models", dataset.NAME, self.args.experiment_id)
+    #     os.makedirs(model_dir, exist_ok=True)
+    #     torch.save(self.net, os.path.join(model_dir, f'task_{self.current_task}_model.ph'))
+
+    #     self.current_task += 1
         
         
-    def end_task_alt(self, dataset) -> None: #
+    # def end_task_alt(self, dataset) -> None: #
 
-        if self.current_task < (dataset.N_TASKS - 1):
-            concept_set = get_concept(self.current_task)
-            with open(concept_set, 'r') as f:
-                words = (f.read()).split('\n')
-            similarity_fn = "soft_wpmi"
-            pool_mode = "avg"
+    #     if self.current_task < (dataset.N_TASKS - 1):
+    #         concept_set = get_concept(self.current_task)
+    #         with open(concept_set, 'r') as f:
+    #             words = (f.read()).split('\n')
+    #         similarity_fn = "soft_wpmi"
+    #         pool_mode = "avg"
             
             
-            for i, layer in enumerate(self.layers):
+    #         for i, layer in enumerate(self.layers):
             
-                similarity, target_feats = get_similarity(self.clip_model, self.net, [layer], concept_set,
-                                                        self.args.batch_size, pool_mode, dataset, similarity_fn, device=self.device)
+    #             similarity, target_feats = get_similarity(self.clip_model, self.net, [layer], concept_set,
+    #                                                     self.args.batch_size, pool_mode, dataset, similarity_fn, device=self.device)
                 
-                vals, ids = torch.topk(similarity, 2, dim=1)
-                diff_vals = torch.abs(vals[:, 0] - vals[:, 1])
+    #             vals, ids = torch.topk(similarity, 2, dim=1)
+    #             diff_vals = torch.abs(vals[:, 0] - vals[:, 1])
                 
-                for class_id in range(dataset.N_CLASSES_PER_TASK):
-                    task_ind = np.arange(len(vals))[ids.detach().cpu().numpy()[:, 0] == (dataset.i - dataset.N_CLASSES_PER_TASK + class_id)]
-                    top5_ind = torch.topk(diff_vals[task_ind], min(task_ind.shape[0], self.args.top_neurons))[1].detach().cpu().numpy()
-                    neurons = task_ind[top5_ind]
-                    print(neurons)
-                    for neuron in neurons:
-                        self.masks[i][neuron, :, :] *= self.args.grad_multiplier #torch.zeros(3, 3)
-                        self.masks[i] = self.masks[i].to(self.device)
+    #             for class_id in range(dataset.N_CLASSES_PER_TASK):
+    #                 task_ind = np.arange(len(vals))[ids.detach().cpu().numpy()[:, 0] == (dataset.i - dataset.N_CLASSES_PER_TASK + class_id)]
+    #                 top5_ind = torch.topk(diff_vals[task_ind], min(task_ind.shape[0], self.args.top_neurons))[1].detach().cpu().numpy()
+    #                 neurons = task_ind[top5_ind]
+    #                 print(neurons)
+    #                 for neuron in neurons:
+    #                     self.masks[i][neuron, :, :] *= self.args.grad_multiplier #torch.zeros(3, 3)
+    #                     self.masks[i] = self.masks[i].to(self.device)
 
-        model_dir = os.path.join(self.args.output_dir, "task_models", dataset.NAME, self.args.experiment_id)
-        os.makedirs(model_dir, exist_ok=True)
-        torch.save(self.net, os.path.join(model_dir, f'task_{self.current_task}_model.ph'))
+    #     model_dir = os.path.join(self.args.output_dir, "task_models", dataset.NAME, self.args.experiment_id)
+    #     os.makedirs(model_dir, exist_ok=True)
+    #     torch.save(self.net, os.path.join(model_dir, f'task_{self.current_task}_model.ph'))
 
-        self.current_task += 1
+    #     self.current_task += 1
         
-    def end_task2(self, dataset) -> None: #
+    # def end_task2(self, dataset) -> None: #
 
-        if self.current_task < (dataset.N_TASKS - 1):
-            concept_set = get_concept(self.current_task)
-            with open(concept_set, 'r') as f:
-                words = (f.read()).split('\n')
-            similarity_fn = "soft_wpmi"
-            pool_mode = "avg"
+    #     if self.current_task < (dataset.N_TASKS - 1):
+    #         concept_set = get_concept(self.current_task)
+    #         with open(concept_set, 'r') as f:
+    #             words = (f.read()).split('\n')
+    #         similarity_fn = "soft_wpmi"
+    #         pool_mode = "avg"
             
-            similarities = []
+    #         similarities = []
             
-            for layer in self.layers:
+    #         for layer in self.layers:
             
-                similarity, target_feats = get_similarity(self.clip_model, self.net, [layer], concept_set,
-                                                        self.args.batch_size, pool_mode, dataset, similarity_fn, device=self.device)
+    #             similarity, target_feats = get_similarity(self.clip_model, self.net, [layer], concept_set,
+    #                                                     self.args.batch_size, pool_mode, dataset, similarity_fn, device=self.device)
                 
-                similarities.append(similarity)
+    #             similarities.append(similarity)
                 
-            similarities = torch.cat(similarities)
-            vals, ids = torch.topk(similarities, 2, dim=1)
-            diff_vals = torch.abs(vals[:, 0] - vals[:, 1])
+    #         similarities = torch.cat(similarities)
+    #         vals, ids = torch.topk(similarities, 2, dim=1)
+    #         diff_vals = torch.abs(vals[:, 0] - vals[:, 1])
             
-            for class_id in range(dataset.N_CLASSES_PER_TASK):
-                task_ind = np.arange(len(vals))[ids.detach().cpu().numpy()[:, 0] == (dataset.i - dataset.N_CLASSES_PER_TASK + class_id)]
-                top5_ind = torch.topk(diff_vals[task_ind], min(task_ind.shape[0], self.args.top_neurons))[1].detach().cpu().numpy()
-                neurons = task_ind[top5_ind]
-                previous = 0
-                for i, sz in enumerate(self.n_neurons):
-                    layer_neurons = (neurons < (sz + previous)) & (neurons >= previous)
-                    top_neurons = neurons[layer_neurons] - previous
-                    for neuron in top_neurons:
-                        self.masks[i][neuron, :, :] *= self.args.grad_multiplier #torch.zeros(3, 3)
-                        self.masks[i] = self.masks[i].to(self.device)
+    #         for class_id in range(dataset.N_CLASSES_PER_TASK):
+    #             task_ind = np.arange(len(vals))[ids.detach().cpu().numpy()[:, 0] == (dataset.i - dataset.N_CLASSES_PER_TASK + class_id)]
+    #             top5_ind = torch.topk(diff_vals[task_ind], min(task_ind.shape[0], self.args.top_neurons))[1].detach().cpu().numpy()
+    #             neurons = task_ind[top5_ind]
+    #             previous = 0
+    #             for i, sz in enumerate(self.n_neurons):
+    #                 layer_neurons = (neurons < (sz + previous)) & (neurons >= previous)
+    #                 top_neurons = neurons[layer_neurons] - previous
+    #                 for neuron in top_neurons:
+    #                     self.masks[i][neuron, :, :] *= self.args.grad_multiplier #torch.zeros(3, 3)
+    #                     self.masks[i] = self.masks[i].to(self.device)
 
-        model_dir = os.path.join(self.args.output_dir, "task_models", dataset.NAME, self.args.experiment_id)
-        os.makedirs(model_dir, exist_ok=True)
-        torch.save(self.net, os.path.join(model_dir, f'task_{self.current_task}_model.ph'))
+    #     model_dir = os.path.join(self.args.output_dir, "task_models", dataset.NAME, self.args.experiment_id)
+    #     os.makedirs(model_dir, exist_ok=True)
+    #     torch.save(self.net, os.path.join(model_dir, f'task_{self.current_task}_model.ph'))
 
-        self.current_task += 1
+    #     self.current_task += 1
 
 
 
